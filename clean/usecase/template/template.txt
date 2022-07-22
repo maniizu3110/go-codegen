@@ -1,0 +1,17 @@
+
+type {{.Model}}Usecase interface {
+	CommonUsecase[domain.{{.Model}}]
+}
+
+// implement {{.model}} usecase
+type {{.model}}UsecaseImpl struct {
+	CommonUsecase[domain.{{.Model}}]
+	repo repository.{{.Model}}Repository
+}
+
+func New{{.Model}}Usecase(commonUsecase CommonUsecase[domain.{{.Model}}], repo repository.{{.Model}}Repository) {{.Model}}Usecase {
+	res := &{{.model}}UsecaseImpl{}
+	res.CommonUsecase = commonUsecase
+	res.repo = repo
+	return res
+}
