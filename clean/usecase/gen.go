@@ -21,7 +21,7 @@ var templateTxt string
 
 const commonUsecaseFileName = "common.go"
 
-//model はfilesに含まれるので削除する予定
+//modeasl はfilesに含まれるので削除する予定
 func Gen(setting util.UsecaseSetting, files []fs.FileInfo) {
 	if _, err := os.Stat(setting.OutputDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(setting.OutputDir, 0777); err != nil {
@@ -38,7 +38,6 @@ func Gen(setting util.UsecaseSetting, files []fs.FileInfo) {
 
 func Create(setting util.UsecaseSetting, fileName string) {
 	model := strings.Split(fileName, ".")[0]
-	fmt.Println(model)
 	params := map[string]any{
 		"Model": strcase.ToCamel(model),
 		"model": strcase.ToLowerCamel(model),
