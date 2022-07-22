@@ -5,9 +5,9 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"fmt"
 	"os"
 
-	"github.com/maniizu3110/go-codegen/clean"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +26,7 @@ to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		clean.Create(path)
+		fmt.Println("Automatic generation of API code in accordance with the Clean Architecture")
 	},
 }
 
@@ -48,5 +48,5 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().StringVarP(&path, "setting", "s", "codegen.yaml", "setting file path")
+
 }

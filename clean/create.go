@@ -9,9 +9,23 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func Create(filePath string) {
+func CreateAll(filePath string) {
 	setting := util.Setting{}
-	//pathはcobraのオプションから受け取る
+
+	b, _ := os.ReadFile(filePath)
+	yaml.Unmarshal(b, &setting)
+	files, err := ioutil.ReadDir(setting.DomainPath)
+	if err != nil {
+		panic(err)
+	}
+	usecase.Gen(setting.UsecaseSetting, files)
+	// TODO: domainの処理追加
+	// TODO: repositoryの処理追加
+	// TODO: delivaryの処理追加
+}
+
+func CreateUsecase(filePath string) {
+	setting := util.Setting{}
 
 	b, _ := os.ReadFile(filePath)
 	yaml.Unmarshal(b, &setting)

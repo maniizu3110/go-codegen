@@ -1,0 +1,6 @@
+package domain
+
+type Models interface {
+	// Describe the structure you want to use in Generics here.
+	// example: string|int|float64|bool
+}
