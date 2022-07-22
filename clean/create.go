@@ -9,11 +9,11 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func Create() {
+func Create(filePath string) {
 	setting := util.Setting{}
 	//pathはcobraのオプションから受け取る
 
-	b, _ := os.ReadFile("codegen.yaml")
+	b, _ := os.ReadFile(filePath)
 	yaml.Unmarshal(b, &setting)
 	files, err := ioutil.ReadDir(setting.DomainPath)
 	if err != nil {
