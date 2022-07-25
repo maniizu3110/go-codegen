@@ -5,6 +5,8 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/maniizu3110/go-codegen/clean"
 	"github.com/spf13/cobra"
 )
@@ -20,7 +22,9 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		clean.CreateAll(path)
+		fmt.Println("hello")
+		fmt.Println(settingFilePath)
+		clean.CreateAll(settingFilePath)
 	},
 }
 
@@ -31,10 +35,4 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// allCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// allCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	rootCmd.Flags().StringVarP(&path, "setting", "s", "codegen.yaml", "setting file path")
 }

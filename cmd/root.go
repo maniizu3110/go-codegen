@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var path string
+var settingFilePath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -43,12 +43,9 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.go-codegen.yaml)")
+	allCmd.PersistentFlags().StringVar(&settingFilePath, "setting", "codegen.yaml", "setting file path")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().StringVarP(&path, "setting", "s", "codegen.yaml", "setting file path")
-
 
 }
