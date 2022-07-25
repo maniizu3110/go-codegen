@@ -1,0 +1,277 @@
+package repository
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/clantable/juksl-v2/services/lists/api/domain"
+	"github.com/clantable/juksl-v2/services/lists/api/repository/query"
+	"github.com/clantable/juksl-v2/services/lists/lib/myerror"
+	"gorm.io/gorm"
+)
+
+type CommonRepository[T domain.Models] interface {
+	Fetch(config domain.FetchConfig) ([]*T, int64, myerror.MyError)
+	GetByID(id uint, expand ...string) (*T, myerror.MyError)
+	Store(data *T) (*T, myerror.MyError)
+	Update(id uint, data *T) (*T, myerror.MyError)
+	SoftDelete(id uint) (*T, myerror.MyError)
+	HardDelete(id uint) (*T, myerror.MyError)
+	Restore(id uint) (*T, myerror.MyError)
+}
+
+// repositoryで扱う基本的な構造体
+type commonRepository[T domain.Models] struct {
+	db        *gorm.DB
+	companyID uint
+	cache     map[uint]*T
+	now       func() time.Time
+}
+
+func NewCommonRepository[T domain.Models](db *gorm.DB, companyID uint) CommonRepository[T] {
+	return &commonRepository[T]{
+		db:        db,
+		companyID: companyID,
+		cache:     make(map[uint]*T),
+		now:       time.Now,
+	}
+}
+
+// Fetch: configの内容に従った情報を全てとってくる．
+func (cr *commonRepository[T]) Fetch(config domain.FetchConfig) ([]*T, int64, myerror.MyError) {
+	return FetchWithConfig[T](config, cr.db, cr.companyID, nil)
+}
+
+// GetByID: 指定IDを持つデータを取ってくる．
+func (cr *commonRepository[T]) GetByID(id uint, expand ...string) (*T, myerror.MyError) {
+	// cacheから返却できるなら，そこから返却
+	if cache, ok := cr.cache[id]; ok && cache != nil && len(expand) == 0 {
+		return cache, nil
+	}
+
+	// 型の具体化
+	var data T
+	// DBを全て取得
+	db := cr.db.Unscoped()
+
+	// クエリビルダーからデータを取得
+	db, err := query.BuildExpandQuery(data, expand, db, func(db *gorm.DB) *gorm.DB {
+		return db.Where("company_id = ?", cr.companyID).Unscoped()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Unscoped().Where("id = ?", id).First(&data).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, myerror.NotFound(nil, "データが見つかりませんでした．")
+		}
+		return nil, ConvertDBError(err)
+	}
+
+
+	return &data, nil
+}
+
+// Store: データの新規作成
+func (cr *commonRepository[T]) Store(data *T) (*T, myerror.MyError) {
+	if err := cr.db.Create(data).Error; err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "データの作成に失敗しました．", err)
+	}
+	return data, nil
+}
+
+// Update: 既存データの内容の更新
+func (cr *commonRepository[T]) Update(id uint, data *T) (*T, myerror.MyError) {
+	orgData, err := cr.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := CheckDataShouldNorToBeChanged(data, orgData); err != nil {
+		return nil, err
+	}
+	fmt.Println("データ", data)
+	if err := cr.db.Model(data).Where("id = ?", id).Updates(data).Error; err != nil {
+		return nil, myerror.NewHTTPErrorInternal(http.StatusInternalServerError, "データの更新に失敗しました．", err)
+	}
+	data, err = cr.GetByID(id)
+	if err != nil {
+		return nil, myerror.NewHTTPErrorInternal(http.StatusInternalServerError, "更新したデータを取得できませんでした．", err)
+	}
+	return data, nil
+}
+
+// SoftDelete:指定データを論理削除（復元可）する．
+func (cr *commonRepository[T]) SoftDelete(id uint) (*T, myerror.MyError) {
+	data, err := cr.GetByID(id)
+	if err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "削除対象のデータを取得できませんでした．", err)
+	}
+	if err := cr.db.Delete(&data).Where("id = ?", id).Error; err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "削除対象のデータを削除できませんでした．", err)
+	}
+
+	return data, nil
+}
+
+// HardDelete:指定データを物理削除（復元不可）する．
+func (cr *commonRepository[T]) HardDelete(id uint) (*T, myerror.MyError) {
+	data, err := cr.GetByID(id)
+	if err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "削除対象のデータを取得できませんでした．", err)
+	}
+	if err := cr.db.Unscoped().Delete(&data).Where("id = ?", id).Error; err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "削除対象のデータを削除できませんでした．", err)
+	}
+	return data, err
+}
+
+// Restore:論理削除されたデータを復元する．
+func (cr *commonRepository[T]) Restore(id uint) (*T, myerror.MyError) {
+	data, err := cr.GetByID(id)
+	if err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "復元対象のデータを取得できませんでした．", err)
+	}
+	if err := cr.db.Unscoped().Model(&data).Update("deleted_at", nil).Error; err != nil {
+		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "復元対象のデータを復元できませんでした．", err)
+	}
+	data, err = cr.GetByID(id)
+	if err != nil {
+		return nil, myerror.NewHTTPErrorInternal(http.StatusInternalServerError, "復元データが取得できませんでした．", err)
+	}
+	return data, nil
+}
+
+// --------- その他必要な関数 -----------
+
+type FetchWithQueryBuilderFunction func(db *gorm.DB) (*gorm.DB, myerror.MyError)
+
+func FetchWithConfig[T domain.Models](config domain.FetchConfig, db *gorm.DB, companyID uint, queryBuilderFunc FetchWithQueryBuilderFunction) ([]*T, int64, myerror.MyError) {
+	var limit int = GetAllMaxLimit
+	var offset int = 0
+	var allCount int64
+	var data *T
+	var (
+		err   myerror.MyError
+		model []*T     = []*T{}
+		q     *gorm.DB = db.Model(data) // data.Dataが取得すべきmodel
+	)
+	if config.Limit > 0 {
+		limit = int(config.Limit)
+	}
+	if config.Offset > 0 {
+		offset = int(config.Offset)
+	}
+	if config.IncludeDeleted {
+		q = q.Unscoped()
+	}
+	if config.OnlyDeleted {
+		q = q.Unscoped().Where("deleted_at is not null")
+	}
+	q, err = query.BuildQueryQuery(data, config.Query, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	q, err = query.BuildOrderQuery(data, config.Order, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	q, err = query.BuildExpandQuery(data, config.Preload, q, func(db *gorm.DB) *gorm.DB {
+		return db.Where("company_id = ?", companyID).Unscoped()
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if queryBuilderFunc != nil {
+		q, err = queryBuilderFunc(q)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	// 最大10000件ずつでちょっとずつ読み込む
+	load := func() (bool, myerror.MyError) {
+		var sub []T
+		subLimit := GetAllSubLimit
+		if limit <= subLimit {
+			subLimit = limit + 1
+		}
+		if err := q.Offset(offset).Limit(subLimit).Find(&sub).Error; err != nil {
+			return false, ConvertDBError(err)
+		}
+		var size int
+		model, size = MergeCommonSlice(model, sub)
+		offset += size
+		limit -= size
+		return size < subLimit || limit < 0, nil
+	}
+	for {
+		shouldEnd, err := load()
+		if err != nil {
+			return nil, 0, err
+		}
+		if shouldEnd {
+			break
+		}
+	}
+	if (config.Limit > 0 && uint(len(model)) > config.Limit) || config.Offset > 0 {
+		if err := q.Model(data).Count(&allCount).Error; err != nil {
+			return nil, 0, ConvertDBError(err)
+		}
+	} else {
+		allCount = int64(len(model))
+	}
+	if config.Limit > 0 && uint(len(model)) > config.Limit {
+		model = model[:config.Limit]
+	}
+	if len(model) > GetAllMaxLimit {
+		return nil, 0, myerror.New("データ数が多すぎる為，取得できません．", "最大取得数の設定が必要です．", err)
+	}
+	return model, allCount, nil
+}
+
+func (cr *commonRepository[T]) UpdateCache(id uint, data *T) {
+	if data != nil {
+		data = ShallowCopy(data).(*T)
+	}
+	cr.cache[id] = data
+}
+
+func (cr *commonRepository[T]) SetNowFunction(f func() time.Time) {
+	cr.now = f
+}
+
+func MergeCommonSlice[T domain.Models](s []*T, t []T) ([]*T, int) {
+	for i := range t {
+		s = append(s, &t[i])
+	}
+	return s, len(t)
+}
+
+func CheckDataShouldNorToBeChanged[T domain.Models](data, orgData *T) myerror.MyError { // privateでも良い？
+	// if data.GetID() != orgData.GetID() {
+	// 	im := "Error: Expected " + strconv.Itoa(int(orgData.GetID())) + " but " + strconv.Itoa(int(data.GetID()))
+	// 	return myerror.NewHTTPError(http.StatusBadRequest, "IDは変更できません．", im, nil)
+	// }
+	// if data.GetCreatedAt().UTC().Unix() != orgData.GetCreatedAt().UTC().Unix() {
+	// 	im := "Error: Expected " + orgData.GetCreatedAt().Format(time.RFC3339) + " but " + data.GetCreatedAt().Format(time.RFC3339)
+	// 	return myerror.NewHTTPError(http.StatusBadRequest, "作成日時は変更できません．", im, nil)
+	// }
+	// if data.GetUpdatedAt().UTC().Unix() != orgData.GetUpdatedAt().UTC().Unix() {
+	// 	im := "Error: Expected " + orgData.GetUpdatedAt().Format(time.RFC3339) + " but " + data.GetUpdatedAt().Format(time.RFC3339)
+	// 	return myerror.NewHTTPError(http.StatusBadRequest, "更新日時は変更できません", im, nil)
+	// }
+	// if data.GetDeletedAt() != orgData.GetDeletedAt() {
+	// 	if data.GetDeletedAt() == nil && orgData.GetDeletedAt() != nil {
+	// 		// pass (Update で削除するケース)
+	// 		// TODO: クライアントの実装を修正して，これも禁止する(restoreを使え)
+	// 	} else if data.GetDeletedAt() == nil || orgData.GetDeletedAt() == nil {
+	// 		return myerror.NewHTTPError(http.StatusBadRequest, "削除日時は変更できません", "nil or nil", nil)
+	// 	} else if data.GetDeletedAt().UTC().Unix() != orgData.GetDeletedAt().UTC().Unix() {
+	// 		im := "Error: Expected " + orgData.GetDeletedAt().Format(time.RFC3339) + " but " + data.GetDeletedAt().Format(time.RFC3339)
+	// 		return myerror.NewHTTPError(http.StatusBadRequest, "削除日時は変更できません", im, nil)
+	// 	}
+	// 	// Pass
+	// }
+	return nil
+}

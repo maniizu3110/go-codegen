@@ -1,0 +1,21 @@
+package repository
+
+import (
+	"github.com/clantable/juksl-v2/services/lists/template/api/domain"
+	_ "github.com/golang/mock/mockgen/model"
+)
+
+type TemplateRepository interface {
+	CommonRepository[domain.Template]
+}
+
+// implement contract repository
+type templateRepositoryImpl struct {
+	CommonRepository[domain.Template]
+}
+
+func NewTemplateRepository(commonRepository CommonRepository[domain.Template]) TemplateRepository {
+	res := &templateRepositoryImpl{}
+	res.CommonRepository = commonRepository
+	return res
+}

@@ -1,0 +1,11 @@
+architecture: clean
+domainPath: ./model
+usecase:
+  domainPackage: domain
+  repositoryPackage: repository
+  outputDir: ./usecase
+  errorType: myerror.MyError
+repository:
+  domainPackage: domain
+  outputDir: ./repository
+  errorType: myerror.MyError
