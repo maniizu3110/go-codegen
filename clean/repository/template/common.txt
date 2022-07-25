@@ -1,35 +1,22 @@
-package repository
-
-import (
-	"fmt"
-	"net/http"
-	"time"
-
-	"github.com/clantable/juksl-v2/services/lists/api/domain"
-	"github.com/clantable/juksl-v2/services/lists/api/repository/query"
-	"github.com/clantable/juksl-v2/services/lists/lib/myerror"
-	"gorm.io/gorm"
-)
-
-type CommonRepository[T domain.Models] interface {
-	Fetch(config domain.FetchConfig) ([]*T, int64, myerror.MyError)
-	GetByID(id uint, expand ...string) (*T, myerror.MyError)
-	Store(data *T) (*T, myerror.MyError)
-	Update(id uint, data *T) (*T, myerror.MyError)
-	SoftDelete(id uint) (*T, myerror.MyError)
-	HardDelete(id uint) (*T, myerror.MyError)
-	Restore(id uint) (*T, myerror.MyError)
+type CommonRepository[T {{.domain}}.Models] interface {
+	Fetch(config {{.domain}}.FetchConfig) ([]*T, int64, {{.errorType}})
+	GetByID(id uint, expand ...string) (*T, {{.errorType}})
+	Store(data *T) (*T, {{.errorType}})
+	Update(id uint, data *T) (*T, {{.errorType}})
+	SoftDelete(id uint) (*T, {{.errorType}})
+	HardDelete(id uint) (*T, {{.errorType}})
+	Restore(id uint) (*T, {{.errorType}})
 }
 
 // repositoryで扱う基本的な構造体
-type commonRepository[T domain.Models] struct {
+type commonRepository[T {{.domain}}.Models] struct {
 	db        *gorm.DB
 	companyID uint
 	cache     map[uint]*T
 	now       func() time.Time
 }
 
-func NewCommonRepository[T domain.Models](db *gorm.DB, companyID uint) CommonRepository[T] {
+func NewCommonRepository[T {{.domain}}.Models](db *gorm.DB, companyID uint) CommonRepository[T] {
 	return &commonRepository[T]{
 		db:        db,
 		companyID: companyID,
@@ -39,12 +26,12 @@ func NewCommonRepository[T domain.Models](db *gorm.DB, companyID uint) CommonRep
 }
 
 // Fetch: configの内容に従った情報を全てとってくる．
-func (cr *commonRepository[T]) Fetch(config domain.FetchConfig) ([]*T, int64, myerror.MyError) {
+func (cr *commonRepository[T]) Fetch(config {{.domain}}.FetchConfig) ([]*T, int64, {{.errorType}}) {
 	return FetchWithConfig[T](config, cr.db, cr.companyID, nil)
 }
 
 // GetByID: 指定IDを持つデータを取ってくる．
-func (cr *commonRepository[T]) GetByID(id uint, expand ...string) (*T, myerror.MyError) {
+func (cr *commonRepository[T]) GetByID(id uint, expand ...string) (*T, {{.errorType}}) {
 	// cacheから返却できるなら，そこから返却
 	if cache, ok := cr.cache[id]; ok && cache != nil && len(expand) == 0 {
 		return cache, nil
@@ -75,7 +62,7 @@ func (cr *commonRepository[T]) GetByID(id uint, expand ...string) (*T, myerror.M
 }
 
 // Store: データの新規作成
-func (cr *commonRepository[T]) Store(data *T) (*T, myerror.MyError) {
+func (cr *commonRepository[T]) Store(data *T) (*T, {{.errorType}}) {
 	if err := cr.db.Create(data).Error; err != nil {
 		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "データの作成に失敗しました．", err)
 	}
@@ -83,7 +70,7 @@ func (cr *commonRepository[T]) Store(data *T) (*T, myerror.MyError) {
 }
 
 // Update: 既存データの内容の更新
-func (cr *commonRepository[T]) Update(id uint, data *T) (*T, myerror.MyError) {
+func (cr *commonRepository[T]) Update(id uint, data *T) (*T, {{.errorType}}) {
 	orgData, err := cr.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -103,7 +90,7 @@ func (cr *commonRepository[T]) Update(id uint, data *T) (*T, myerror.MyError) {
 }
 
 // SoftDelete:指定データを論理削除（復元可）する．
-func (cr *commonRepository[T]) SoftDelete(id uint) (*T, myerror.MyError) {
+func (cr *commonRepository[T]) SoftDelete(id uint) (*T, {{.errorType}}) {
 	data, err := cr.GetByID(id)
 	if err != nil {
 		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "削除対象のデータを取得できませんでした．", err)
@@ -116,7 +103,7 @@ func (cr *commonRepository[T]) SoftDelete(id uint) (*T, myerror.MyError) {
 }
 
 // HardDelete:指定データを物理削除（復元不可）する．
-func (cr *commonRepository[T]) HardDelete(id uint) (*T, myerror.MyError) {
+func (cr *commonRepository[T]) HardDelete(id uint) (*T, {{.errorType}}) {
 	data, err := cr.GetByID(id)
 	if err != nil {
 		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "削除対象のデータを取得できませんでした．", err)
@@ -128,7 +115,7 @@ func (cr *commonRepository[T]) HardDelete(id uint) (*T, myerror.MyError) {
 }
 
 // Restore:論理削除されたデータを復元する．
-func (cr *commonRepository[T]) Restore(id uint) (*T, myerror.MyError) {
+func (cr *commonRepository[T]) Restore(id uint) (*T, {{.errorType}}) {
 	data, err := cr.GetByID(id)
 	if err != nil {
 		return nil, myerror.NewHTTPErrorPublic(http.StatusInternalServerError, "復元対象のデータを取得できませんでした．", err)
@@ -145,15 +132,15 @@ func (cr *commonRepository[T]) Restore(id uint) (*T, myerror.MyError) {
 
 // --------- その他必要な関数 -----------
 
-type FetchWithQueryBuilderFunction func(db *gorm.DB) (*gorm.DB, myerror.MyError)
+type FetchWithQueryBuilderFunction func(db *gorm.DB) (*gorm.DB, {{.errorType}})
 
-func FetchWithConfig[T domain.Models](config domain.FetchConfig, db *gorm.DB, companyID uint, queryBuilderFunc FetchWithQueryBuilderFunction) ([]*T, int64, myerror.MyError) {
+func FetchWithConfig[T {{.domain}}.Models](config {{.domain}}.FetchConfig, db *gorm.DB, companyID uint, queryBuilderFunc FetchWithQueryBuilderFunction) ([]*T, int64, {{.errorType}}) {
 	var limit int = GetAllMaxLimit
 	var offset int = 0
 	var allCount int64
 	var data *T
 	var (
-		err   myerror.MyError
+		err   {{.errorType}}
 		model []*T     = []*T{}
 		q     *gorm.DB = db.Model(data) // data.Dataが取得すべきmodel
 	)
@@ -190,7 +177,7 @@ func FetchWithConfig[T domain.Models](config domain.FetchConfig, db *gorm.DB, co
 		}
 	}
 	// 最大10000件ずつでちょっとずつ読み込む
-	load := func() (bool, myerror.MyError) {
+	load := func() (bool, {{.errorType}}) {
 		var sub []T
 		subLimit := GetAllSubLimit
 		if limit <= subLimit {
@@ -241,14 +228,14 @@ func (cr *commonRepository[T]) SetNowFunction(f func() time.Time) {
 	cr.now = f
 }
 
-func MergeCommonSlice[T domain.Models](s []*T, t []T) ([]*T, int) {
+func MergeCommonSlice[T {{.domain}}.Models](s []*T, t []T) ([]*T, int) {
 	for i := range t {
 		s = append(s, &t[i])
 	}
 	return s, len(t)
 }
 
-func CheckDataShouldNorToBeChanged[T domain.Models](data, orgData *T) myerror.MyError { // privateでも良い？
+func CheckDataShouldNorToBeChanged[T {{.domain}}.Models](data, orgData *T) {{.errorType}} { // privateでも良い？
 	// if data.GetID() != orgData.GetID() {
 	// 	im := "Error: Expected " + strconv.Itoa(int(orgData.GetID())) + " but " + strconv.Itoa(int(data.GetID()))
 	// 	return myerror.NewHTTPError(http.StatusBadRequest, "IDは変更できません．", im, nil)

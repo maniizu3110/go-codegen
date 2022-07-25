@@ -19,9 +19,9 @@ func CreateAll(filePath string) {
 	if err != nil {
 		panic(err)
 	}
-	usecase.Gen(setting.UsecaseSetting, files)
+	// usecase.Gen(setting.UsecaseSetting, files)
+	repository.Gen(setting.RepositorySetting, files)
 	// TODO: domainの処理追加
-	// TODO: repositoryの処理追加
 	// TODO: delivaryの処理追加
 }
 
